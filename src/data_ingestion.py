@@ -8,7 +8,9 @@ from PIL import Image # For image processing with OCR
 import io
 
 # --- Configuration for Tesseract (if not in PATH) ---
-# pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe' # Example for Windows
+# IMPORTANT: If Tesseract is not in your system's PATH, uncomment and set the path below.
+# pytesseract.pytesseract.tesseract_cmd = r'/path/to/tesseract' # For Linux/macOS
+# pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe' # For Windows
 
 def load_text_from_pdf(file_path):
     """Extracts text from a PDF file."""
@@ -18,7 +20,9 @@ def load_text_from_pdf(file_path):
         for page_num in range(len(doc)):
             page = doc.load_page(page_num)
             text += page.get_text()
-            # --- Basic OCR for images within PDF (optional, can be slow) ---
+            # --- Optional: OCR for images embedded within PDF pages ---
+            # This section can be enabled if OCR for images inside PDFs is needed.
+            # Note: This can significantly slow down PDF processing and increase memory usage.
             # image_list = page.get_images(full=True)
             # for img_index, img in enumerate(image_list):
             #     xref = img[0]
@@ -109,7 +113,10 @@ def ingest_data(data_source_path):
 # --- Sample Usage ---
 if __name__ == "__main__":
     print("Starting Data Ingestion Module...")
-    
+
+    # Note: For full testing of PDF and Image OCR in this sample script,
+    # either manually create the sample files (e.g., 'sample_resume.pdf', 'sample_image.png')
+    # or uncomment and adapt the file creation code below.
     # Create dummy files for testing
     sample_data_dir = "sample_data_ingestion"
     os.makedirs(sample_data_dir, exist_ok=True)

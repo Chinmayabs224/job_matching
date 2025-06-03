@@ -10,10 +10,9 @@ import os
 
 # --- Configuration ---
 MODEL_SAVE_PATH = "models/job_classifier_dt.joblib"
-VECTORIZER_SAVE_PATH = "models/job_classifier_vectorizer.joblib"
 
 # --- Model Training Function ---
-def train_job_classifier(job_data, text_column='cleaned_description', label_column='job_category'):
+def train_job_classifier(job_data, text_column='cleaned_description', label_column='job_category', output_model_path=None):
     """
     Trains a Decision Tree classifier to categorize job roles.
 
@@ -21,10 +20,12 @@ def train_job_classifier(job_data, text_column='cleaned_description', label_colu
         job_data (pd.DataFrame): DataFrame containing job descriptions and their categories.
         text_column (str): Name of the column with preprocessed job description text.
         label_column (str): Name of the column with job category labels.
+        output_model_path (str, optional): Path to save the trained model pipeline.
+                                           Defaults to MODEL_SAVE_PATH.
 
     Returns:
         sklearn.pipeline.Pipeline: The trained classification pipeline (vectorizer + classifier).
-        dict: A dictionary containing training metrics (accuracy, classification report).
+        dict: A dictionary containing training metrics (e.g., accuracy, classification report).
     """
     if not isinstance(job_data, pd.DataFrame) or text_column not in job_data.columns or label_column not in job_data.columns:
         print("Error: Invalid input data or column names.")
@@ -74,10 +75,13 @@ def train_job_classifier(job_data, text_column='cleaned_description', label_colu
         "classification_report_test": classification_report(y_test, y_pred_test, output_dict=True, zero_division=0)
     }
     
+    # Determine save path
+    save_path = output_model_path if output_model_path else MODEL_SAVE_PATH
+    
     # Save the trained pipeline (model + vectorizer)
-    os.makedirs(os.path.dirname(MODEL_SAVE_PATH), exist_ok=True)
-    joblib.dump(pipeline, MODEL_SAVE_PATH)
-    print(f"Trained model pipeline saved to {MODEL_SAVE_PATH}")
+    os.makedirs(os.path.dirname(save_path), exist_ok=True)
+    joblib.dump(pipeline, save_path)
+    print(f"Trained model pipeline saved to {save_path}")
     
     # Note: For TF-IDF, the vectorizer is part of the pipeline. 
     # If using embeddings directly, you might not need a separate vectorizer here.
@@ -85,27 +89,30 @@ def train_job_classifier(job_data, text_column='cleaned_description', label_colu
     return pipeline, metrics
 
 # --- Prediction Function ---
-def predict_job_category(job_descriptions_list, model_pipeline=None):
+def predict_job_category(job_descriptions_list, model_pipeline=None, input_model_path=None):
     """
     Predicts job categories for a list of job descriptions using a trained model.
 
     Args:
         job_descriptions_list (list of str): A list of preprocessed job description texts.
-        model_pipeline (sklearn.pipeline.Pipeline, optional): The trained model pipeline. 
-                                                              If None, attempts to load from MODEL_SAVE_PATH.
+        model_pipeline (sklearn.pipeline.Pipeline, optional): The trained model pipeline.
+                                                              If None, attempts to load model from path.
+        input_model_path (str, optional): Path to load the trained model pipeline from.
+                                          Defaults to MODEL_SAVE_PATH if model_pipeline is None.
 
     Returns:
         list: A list of predicted job categories.
     """
     if model_pipeline is None:
+        load_path = input_model_path if input_model_path else MODEL_SAVE_PATH
         try:
-            model_pipeline = joblib.load(MODEL_SAVE_PATH)
-            print(f"Loaded model pipeline from {MODEL_SAVE_PATH}")
+            model_pipeline = joblib.load(load_path)
+            print(f"Loaded model pipeline from {load_path}")
         except FileNotFoundError:
-            print(f"Error: Model file not found at {MODEL_SAVE_PATH}. Please train the model first.")
+            print(f"Error: Model file not found at {load_path}. Please train the model first.")
             return None
         except Exception as e:
-            print(f"Error loading model: {e}")
+            print(f"Error loading model from {load_path}: {e}")
             return None
 
     if not isinstance(job_descriptions_list, list) or not all(isinstance(desc, str) for desc in job_descriptions_list):
