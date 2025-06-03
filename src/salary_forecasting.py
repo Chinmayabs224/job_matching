@@ -14,7 +14,6 @@ import os
 
 # --- Configuration ---
 SALARY_MODEL_SAVE_PATH = "models/salary_forecaster_xgb.joblib"
-PREPROCESSOR_SAVE_PATH = "models/salary_preprocessor.joblib"
 
 # --- Feature Engineering (Conceptual) ---
 # In a real scenario, you'd extract features like:
@@ -26,7 +25,7 @@ PREPROCESSOR_SAVE_PATH = "models/salary_preprocessor.joblib"
 # - Education level
 
 # --- Model Training Function ---
-def train_salary_forecaster(job_features_df, target_salary_column='salary_midpoint'):
+def train_salary_forecaster(job_features_df, target_salary_column='salary_midpoint', output_model_path=None):
     """
     Trains a regression model to predict salary.
 
@@ -34,6 +33,8 @@ def train_salary_forecaster(job_features_df, target_salary_column='salary_midpoi
         job_features_df (pd.DataFrame): DataFrame with features and target salary.
                                         Example features: 'skills_list', 'location', 'experience_level_numeric'.
         target_salary_column (str): Name of the column containing the numerical salary target.
+        output_model_path (str, optional): Path to save the trained model pipeline.
+                                           Defaults to SALARY_MODEL_SAVE_PATH.
 
     Returns:
         sklearn.pipeline.Pipeline: The trained regression pipeline (preprocessor + model).
@@ -114,16 +115,21 @@ def train_salary_forecaster(job_features_df, target_salary_column='salary_midpoi
     
     # Fit the pipeline (preprocessor will be fit on X_train and transform X_train)
     # Then regressor will be fit on the transformed X_train.
-    # For XGBoost early stopping, we'd typically do: 
-    # X_train_transformed = pipeline.named_steps['preprocessor'].fit_transform(X_train)
-    # X_test_transformed = pipeline.named_steps['preprocessor'].transform(X_test)
-    # pipeline.named_steps['regressor'].fit(X_train_transformed, y_train, 
-    #                                       eval_set=[(X_test_transformed, y_test)], verbose=False)
-    # For simplicity in this example, we fit the whole pipeline without explicit early stopping eval_set here.
-    # XGBoost in a pipeline can still use its internal early stopping if fit parameters are passed correctly.
-    # However, the `early_stopping_rounds` in constructor works if an `eval_set` is provided to `fit`.
-    # Let's fit without it for pipeline simplicity, or one could pass fit_params to pipeline.fit.
-    pipeline.fit(X_train, y_train)
+    # For XGBoost early stopping in a pipeline, we need to prepare the eval_set
+    # by transforming X_test with the preprocessor fitted on X_train.
+    
+    # Create a temporary pipeline with just the preprocessor to transform X_test for eval_set
+    temp_preprocessor_pipeline = Pipeline(steps=[('preprocessor', preprocessor)])
+    temp_preprocessor_pipeline.fit(X_train) # Fit preprocessor on X_train
+    X_test_transformed_for_eval = temp_preprocessor_pipeline.transform(X_test)
+
+    fit_params = {
+        'regressor__eval_set': [(X_test_transformed_for_eval, y_test)],
+        'regressor__verbose': False # Suppress XGBoost verbosity during training with early stopping
+        # 'regressor__early_stopping_rounds': 10 # This is already in constructor, but can be overridden here
+    }
+    
+    pipeline.fit(X_train, y_train, **fit_params)
     
     # Evaluate
     y_pred_train = pipeline.predict(X_train)
@@ -143,37 +149,42 @@ def train_salary_forecaster(job_features_df, target_salary_column='salary_midpoi
         "test_rmse": test_rmse, "test_r2": test_r2, "test_mae": test_mae
     }
 
-    # Save the preprocessor and model pipeline
-    os.makedirs(os.path.dirname(SALARY_MODEL_SAVE_PATH), exist_ok=True)
-    joblib.dump(pipeline, SALARY_MODEL_SAVE_PATH)
-    # The preprocessor is part of the pipeline, but if needed separately:
-    # joblib.dump(preprocessor, PREPROCESSOR_SAVE_PATH)
-    print(f"Trained salary forecasting pipeline saved to {SALARY_MODEL_SAVE_PATH}")
+    # Determine save path
+    save_path = output_model_path if output_model_path else SALARY_MODEL_SAVE_PATH
+    
+    # Save the model pipeline
+    os.makedirs(os.path.dirname(save_path), exist_ok=True)
+    joblib.dump(pipeline, save_path)
+    print(f"Trained salary forecasting pipeline saved to {save_path}")
 
     return pipeline, metrics
 
 # --- Prediction Function ---
-def predict_salary(job_features_df, model_pipeline=None):
+def predict_salary(job_features_df, model_pipeline=None, input_model_path=None):
     """
     Predicts salary for new job feature sets.
 
     Args:
         job_features_df (pd.DataFrame): DataFrame with features for prediction.
                                         Must have the same columns as used in training (before preprocessing).
-        model_pipeline (sklearn.pipeline.Pipeline, optional): Trained model pipeline. Loads if None.
+        model_pipeline (sklearn.pipeline.Pipeline, optional): Trained model pipeline.
+                                                              If None, attempts to load from path.
+        input_model_path (str, optional): Path to load the trained model pipeline from.
+                                          Defaults to SALARY_MODEL_SAVE_PATH if model_pipeline is None.
 
     Returns:
         np.ndarray: Predicted salaries.
     """
     if model_pipeline is None:
+        load_path = input_model_path if input_model_path else SALARY_MODEL_SAVE_PATH
         try:
-            model_pipeline = joblib.load(SALARY_MODEL_SAVE_PATH)
-            print(f"Loaded salary forecasting pipeline from {SALARY_MODEL_SAVE_PATH}")
+            model_pipeline = joblib.load(load_path)
+            print(f"Loaded salary forecasting pipeline from {load_path}")
         except FileNotFoundError:
-            print(f"Error: Model file not found at {SALARY_MODEL_SAVE_PATH}. Train first.")
+            print(f"Error: Model file not found at {load_path}. Train first.")
             return None
         except Exception as e:
-            print(f"Error loading model: {e}")
+            print(f"Error loading model from {load_path}: {e}")
             return None
 
     if not isinstance(job_features_df, pd.DataFrame) or job_features_df.empty:

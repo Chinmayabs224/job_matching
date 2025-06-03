@@ -11,10 +11,10 @@ import joblib
 import os
 
 # --- Configuration ---
-ACCEPTANCE_MODEL_SAVE_PATH = "models/acceptance_predictor_logreg.joblib"
+ACCEPTANCE_MODEL_SAVE_PATH = "models/acceptance_predictor_logreg.joblib" # Default path
 
 # --- Model Training Function ---
-def train_acceptance_predictor(candidate_job_features_df, target_column='accepted_offer'):
+def train_acceptance_predictor(candidate_job_features_df, target_column='accepted_offer', output_model_path=None):
     """
     Trains a Logistic Regression model to predict candidate acceptance probability.
 
@@ -23,6 +23,8 @@ def train_acceptance_predictor(candidate_job_features_df, target_column='accepte
             Example features: 'match_score', 'salary_diff_percentage', 'candidate_experience_years', 'is_remote'.
             Target variable ('accepted_offer') should be binary (1 for accepted, 0 for rejected).
         target_column (str): Name of the binary target column.
+        output_model_path (str, optional): Path to save the trained model pipeline.
+                                           Defaults to ACCEPTANCE_MODEL_SAVE_PATH.
 
     Returns:
         sklearn.pipeline.Pipeline: The trained classification pipeline.
@@ -86,9 +88,9 @@ def train_acceptance_predictor(candidate_job_features_df, target_column='accepte
 
     if not transformers_list: # Only binary features or no features to transform
         if current_binary_features:
-             # If only binary, ensure they are numeric and pass them through or scale if necessary
-            preprocessor = ColumnTransformer(transformers=[('bin', StandardScaler(), current_binary_features)], remainder='drop') 
-            # Or 'passthrough' if they are fine as is and don't need scaling.
+            # If only binary features are present (and no numerical/categorical ones that need transformation),
+            # pass them through without scaling, as they are already 0/1.
+            preprocessor = ColumnTransformer(transformers=[('bin_passthrough', 'passthrough', current_binary_features)], remainder='drop')
         else: # No features to transform, this case should ideally not happen if feature_columns is not empty
             print("Warning: No features specified for transformation in preprocessor.")
             # Create a dummy preprocessor that does nothing if no specific transformers are needed
@@ -132,34 +134,41 @@ def train_acceptance_predictor(candidate_job_features_df, target_column='accepte
         "confusion_matrix_test": confusion_matrix(y_test, y_pred_test).tolist()
     }
 
-    os.makedirs(os.path.dirname(ACCEPTANCE_MODEL_SAVE_PATH), exist_ok=True)
-    joblib.dump(pipeline, ACCEPTANCE_MODEL_SAVE_PATH)
-    print(f"Trained acceptance prediction pipeline saved to {ACCEPTANCE_MODEL_SAVE_PATH}")
+    # Determine save path
+    save_path = output_model_path if output_model_path else ACCEPTANCE_MODEL_SAVE_PATH
+
+    os.makedirs(os.path.dirname(save_path), exist_ok=True)
+    joblib.dump(pipeline, save_path)
+    print(f"Trained acceptance prediction pipeline saved to {save_path}")
 
     return pipeline, metrics
 
 # --- Prediction Function ---
-def predict_acceptance_probability(features_df, model_pipeline=None):
+def predict_acceptance_probability(features_df, model_pipeline=None, input_model_path=None):
     """
     Predicts the probability of a candidate accepting an offer.
 
     Args:
         features_df (pd.DataFrame): DataFrame with features for prediction.
-        model_pipeline (sklearn.pipeline.Pipeline, optional): Trained model pipeline. Loads if None.
+        model_pipeline (sklearn.pipeline.Pipeline, optional): Trained model pipeline.
+                                                              If None, attempts to load from path.
+        input_model_path (str, optional): Path to load the trained model pipeline from.
+                                          Defaults to ACCEPTANCE_MODEL_SAVE_PATH if model_pipeline is None.
 
     Returns:
         np.ndarray: Array of acceptance probabilities (between 0 and 1).
                     Returns None if an error occurs.
     """
     if model_pipeline is None:
+        load_path = input_model_path if input_model_path else ACCEPTANCE_MODEL_SAVE_PATH
         try:
-            model_pipeline = joblib.load(ACCEPTANCE_MODEL_SAVE_PATH)
-            print(f"Loaded acceptance prediction pipeline from {ACCEPTANCE_MODEL_SAVE_PATH}")
+            model_pipeline = joblib.load(load_path)
+            print(f"Loaded acceptance prediction pipeline from {load_path}")
         except FileNotFoundError:
-            print(f"Error: Model file not found at {ACCEPTANCE_MODEL_SAVE_PATH}. Train first.")
+            print(f"Error: Model file not found at {load_path}. Train first.")
             return None
         except Exception as e:
-            print(f"Error loading model: {e}")
+            print(f"Error loading model from {load_path}: {e}")
             return None
 
     if not isinstance(features_df, pd.DataFrame) or features_df.empty:

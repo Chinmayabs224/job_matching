@@ -79,7 +79,10 @@ def extract_phone_numbers(text):
     if not isinstance(text, str):
         return []
     # This regex is a simplified example and might need to be more robust for international numbers
-    return re.findall(r'\b(?:\+?1[ -]?)?(?:\(?([2-9][0-8][0-9])\)?[-.●\s]?)?([2-9][0-9]{2})[-.●\s]?([0-9]{4})(?:\s*(?:#|x\.?|ext\.?|extension)\s*(\d+))?\b', text)
+    # It aims to capture common US phone number formats.
+    pattern = r'\b(?:\+?1[ -]?)?(?:\(?([2-9][0-8][0-9])\)?[-.●\s]?)?([2-9][0-9]{2})[-.●\s]?([0-9]{4})(?:\s*(?:#|x\.?|ext\.?|extension)\s*(\d+))?\b'
+    matches = re.finditer(pattern, text)
+    return [match.group(0) for match in matches]
 
 # --- Main Preprocessing Function ---
 def preprocess_document_text(raw_text, document_type='resume'): # document_type can be 'resume' or 'job_posting'
