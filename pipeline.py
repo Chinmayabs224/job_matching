@@ -142,7 +142,7 @@ def run_pipeline():
                                                           model_path=os.path.join(MODELS_DIR, 'job_exp_classifier.joblib'))
             if classifier and test_texts_clf and test_labels_clf:
                 print("Evaluating job classifier...")
-                predictions_clf = predict_job_role(test_texts_clf, vectorizer, classifier)
+                predictions_clf = predict_job_category(test_texts_clf, vectorizer, classifier)
                 clf_metrics = calculate_classification_metrics(test_labels_clf, predictions_clf, average='weighted')
                 print(f"  Classifier Metrics: {clf_metrics}")
                 if len(unique_exp_levels) <= 10: # Plot CM only for few classes
